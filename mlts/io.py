@@ -25,7 +25,7 @@ def split(data, ycol, shape, seed = 1):
     if type(shape) == int:
         rest = (m - shape) / 2
         shape = (shape, math.ceil(rest), math.floor(rest))
-    assert(len(shape) == 3)
+    assert len(shape) == 3
 
     # Randomly shuffle training examples in the dataset
     data.sample(frac=1, random_state=seed).reset_index(drop=True)
@@ -50,7 +50,7 @@ def split(data, ycol, shape, seed = 1):
 def normalize(ds):
     """Estimate normalization parametes on training dataset and apply them on development and testing datasets."""
 
-    assert(len(ds) == 3)
+    assert len(ds) == 3
     (X_train_in, y_train), (X_dev_in, y_dev), (X_test_in, y_test) = ds
 
     mu, sigma = _norm.estimate(X_train_in)
