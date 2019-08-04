@@ -59,23 +59,24 @@ def _analyze_training_examples(build_model, optimize, hparams, ds_train, ds_dev,
     """Use model selection algorithm to check for underfitting problem."""
 
     X_train, y_train = ds_train
-    X_dev, y_dev = ds_dev
     m, n_x = X_train.shape
 
     hparams_without_regularization = hparams.copy()
     hparams_without_regularization["lambda"] = 0.
     
-    m_acc = np.linspace(start=0, stop=m, num=steps, dtype=int)
+    m_acc = np.linspace(start=1, stop=m, num=steps, dtype=int)
     hist = pd.DataFrame(columns = ["m", "E_train", "E_dev"])
 
-    for i in m_acc:
-        m_train_slice = i + 1
-        X_train_slice = X_train[0:m_train_slice, :]
-        y_train_slice = y_train[0:m_train_slice]
+    for m_train_slice in m_acc:
+        ds_train_slice = (X_train[0:m_train_slice, :], y_train[0:m_train_slice])
 
-        Theta = optimize(hparams, (X_train_slice, y_train_slice))
-        E_train = _evaluate_cost(build_model, hparams_without_regularization, Theta, (X_train, y_train))
-        E_dev = _evaluate_cost(build_model, hparams_without_regularization, Theta, (X_dev, y_dev))
+        ## We use regularization when estimating parameters
+        Theta = optimize(hparams, ds_train_slice)
+        ## We don't use regularization when computing the training and development error
+        ## The training set error is computed on the training subset
+        E_train = _evaluate_cost(build_model, hparams_without_regularization, Theta, ds_train_slice)
+        ## However, the cross validation error is computed over the entire development set
+        E_dev = _evaluate_cost(build_model, hparams_without_regularization, Theta, ds_dev)
 
         hist = hist.append(
             pd.DataFrame({"m": m_train_slice, "E_train": E_train, "E_dev": E_dev}, index = [0]),
