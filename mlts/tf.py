@@ -17,8 +17,8 @@ class ModelAdapter():
         X, y = ds
         return self.model.evaluate(X, y)
 
-    def analyze_training_examples(self, ds_train, ds_dev, epochs):
-        return _analyze_training_examples(
+    def analyze_dataset(self, ds_train, ds_dev, epochs, steps=10):
+        return _analyze_dataset(
             self.build_model,
             lambda hparams, ds: self.estimate_parameters(
                 hparams,
@@ -28,7 +28,8 @@ class ModelAdapter():
             ).get_weights(),
             self.hparams,
             ds_train,
-            ds_dev
+            ds_dev,
+            steps,
         )
     
     @staticmethod
@@ -55,7 +56,7 @@ def _evaluate_cost(build_model, hparams, Theta, ds):
 
     return j
 
-def _analyze_training_examples(build_model, optimize, hparams, ds_train, ds_dev, steps=10):
+def _analyze_dataset(build_model, optimize, hparams, ds_train, ds_dev, steps):
     """Use model selection algorithm to check for underfitting problem."""
 
     X_train, y_train = ds_train
