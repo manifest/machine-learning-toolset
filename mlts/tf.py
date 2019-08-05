@@ -68,7 +68,7 @@ class ModelAdapter():
         """Estimate the loss and metrics values for the model."""
 
         X, y = ds
-        return self.model.evaluate(X, y, verbose=0)
+        return self.model.evaluate(X, y, self.options["verbose"])
 
     def analyze_dataset(self, ds_train, ds_dev, steps=10):
         """Use model selection algorithm to determine if the dataset has an underfitting problem."""
