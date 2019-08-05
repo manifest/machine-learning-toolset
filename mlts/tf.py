@@ -1,14 +1,6 @@
 import pandas as pd
 import numpy as np
 
-def _default_hyperparameters():
-    """Default values for hyperparameters."""
-
-    return {
-        "lambda": 0.,
-        "batch_size": 32,
-    }
-
 class RangeGenerator():
     """Generate and narrow a range within specified boundaries."""
 
@@ -53,17 +45,24 @@ class LambdaRangeGenerator(RangeGenerator):
 class ModelAdapter():
     """A base class for a model adapter that provides methods for error analysis and hyperparameters tuning. Derived classes must implement methods creating the model and estimating parameters of the learning algorithm."""
 
-    def __init__(self, hparams=_default_hyperparameters(), metrics=[], seed=None):
-        model = self.build_model(hparams=hparams, metrics=metrics)
+    def __init__(self, options={}, hparams={}, metrics=[]):
+        self.options = {
+            "epochs": 1,
+            "batch_size": 32,
+            "verbose": 0,
+            "seed": None,
+            **options,
+        }
+        self.hparams = {
+            "lambda": 0.,
+            **hparams,
+        }
+        self.model = self.build_model(hparams=self.hparams, metrics=metrics)
 
-        self.model = model
-        self.hparams = hparams
-        self.seed = seed
-
-    def fit(self, ds, epochs):
+    def fit(self, ds):
         """Estimate parameters of the model using a method provided by a derived class."""
 
-        self.model = self.estimate_parameters(self.hparams, self.model, ds, epochs, seed=self.seed)
+        self.model = self.estimate_parameters(self.options, self.model, ds)
 
     def evaluate(self, ds):
         """Estimate the loss and metrics values for the model."""
@@ -71,17 +70,15 @@ class ModelAdapter():
         X, y = ds
         return self.model.evaluate(X, y, verbose=0)
 
-    def analyze_dataset(self, ds_train, ds_dev, epochs, steps=10):
+    def analyze_dataset(self, ds_train, ds_dev, steps=10):
         """Use model selection algorithm to determine if the dataset has an underfitting problem."""
 
         return _analyze_dataset(
             self.build_model,
             lambda hparams, ds: self.estimate_parameters(
-                hparams,
+                self.options,
                 self.build_model(hparams, metrics=[]),
                 ds,
-                epochs,
-                seed=self.seed,
             ).get_weights(),
             self.hparams,
             ds_train,
@@ -89,24 +86,22 @@ class ModelAdapter():
             steps,
         )
 
-    def tune_hyperparameters(self, gen, ds_train, ds_dev, epochs, deep=10):
+    def tune_hyperparameters(self, gen, ds_train, ds_dev, deep=10):
         """Use model selection algorithm to find the best hyperparameters values. Update hyperparameters values of the adapter."""
 
-        result = self.analyze_hyperparameters(gen, ds_train, ds_dev, epochs, deep)
+        result = self.analyze_hyperparameters(gen, ds_train, ds_dev, deep)
         self.hparams = {**self.hparams, **_read_hyperparameters(*result)}
         return result
 
-    def analyze_hyperparameters(self, gen, ds_train, ds_dev, epochs, deep=10):
+    def analyze_hyperparameters(self, gen, ds_train, ds_dev, deep=10):
         """Use model selection algorithm to find the best hyperparameters values."""
 
         return _analyze_hyperparameters_deep(
             self.build_model,
             lambda hparams, ds: self.estimate_parameters(
-                hparams,
+                self.options,
                 self.build_model(hparams, metrics=[]),
                 ds,
-                epochs,
-                seed=self.seed,
             ).get_weights(),
             self.hparams,
             gen,
@@ -132,7 +127,7 @@ class ModelAdapter():
         raise NotImplementedError()
 
     @staticmethod
-    def estimate_parameters(hparams, model, ds, epochs, callbacks=[]):
+    def estimate_parameters(options, model, ds, callbacks=[]):
         """Implement the learning algorithm parameters estimation."""
 
         raise NotImplementedError()
