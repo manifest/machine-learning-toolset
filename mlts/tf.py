@@ -115,6 +115,16 @@ class ModelAdapter():
             deep,
         )
 
+    def metric(self, name):
+        "Retrieve the last value of metric with specified name from the model history."
+
+        return self.model.history.history[name][-1]
+
+    def metrics_history(self):
+        "Retrieve historical metric values."
+
+        return pd.DataFrame(self.model.history.history).rename_axis("epoch").reset_index()
+
     @staticmethod
     def build_model(hparams, metrics = []):
         """Implement the model."""
