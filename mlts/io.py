@@ -6,26 +6,26 @@ import math
 
 def merge(data_acc):
     """Merge multiple dataframes into one."""
+    if type(data_acc) != list: raise TypeError("'data_acc' isn't a list")
+    if len(data_acc) < 1: raise ValueError("'data_acc' is an empty list")
 
-    assert len(data_acc) > 0, "at least one dataframe is provided"
     return reduce(lambda acc, data: acc.merge(data), data_acc[1:], data_acc[0])
 
 def check(data):
     """Check the dataframe for undefined values."""
+    if type(data) != pd.core.frame.DataFrame: raise TypeError("'data' isn't a DataFrame")
+    if sum(data.isna().sum()) != 0: raise ValueError("Some elements of the dataset are undefined")
 
-    assert type(data) == pd.core.frame.DataFrame
-    assert sum(data.isna().sum()) == 0, "all elements of the dataset are defined"
-
-def split(data, ycol, shape, seed = 1):
+def split(data, ycol, shape, seed = None):
     """Split the specified dataset into training, development, and testing. Randomly shuffle training examples."""
+    if type(data) != pd.core.frame.DataFrame: raise TypeError("'data' isn't a DataFrame")
+    if type(ycol) != int: raise TypeError("'ycol' isn't an int")
 
-    assert type(data) == pd.core.frame.DataFrame
-    assert type(ycol) == int
     m = data.shape[0]
     if type(shape) == int:
         rest = (m - shape) / 2
         shape = (shape, math.ceil(rest), math.floor(rest))
-    assert len(shape) == 3
+    if len(shape) != 3: raise RuntimeError("'shape' isn't a 3-element list")
 
     # Randomly shuffle training examples in the dataset
     data.sample(frac=1, random_state=seed).reset_index(drop=True)
@@ -56,8 +56,9 @@ def slice(ds, idx_start, idx_stop):
 
 def normalize(ds):
     """Estimate normalization parametes on the training dataset and apply them to development and testing datasets."""
+    if type(ds) != tuple: raise TypeError("'ds' isn't a tuple")
+    if len(ds) != 3: raise ValueError("'ds' isn't a 3-element tuple")
 
-    assert len(ds) == 3
     (X_train_in, y_train), (X_dev_in, y_dev), (X_test_in, y_test) = ds
 
     mu, sigma = _norm.estimate(X_train_in)

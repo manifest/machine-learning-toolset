@@ -26,7 +26,7 @@ class RangeGenerator():
         self._update_step()
         
     def _update_step(self):
-        assert self.stop > self.start
+        if self.stop < self.start: raise RuntimeError("'start' value of the range has a greater value then 'stop'")
 
         self.step = (self.stop - self.start) / self.n_steps
 
@@ -35,15 +35,22 @@ class LambdaRangeGenerator(RangeGenerator):
 
     def __init__(self, start=0.0001, stop=10, steps=3, *args, **kwargs):
         super(LambdaRangeGenerator, self).__init__(start=start, stop=stop, steps=steps, *args, **kwargs)
-        
-    def adjast(self, value):
-        super().adjast(value["lambda"])
+
+    def adjast(self, hparam):
+        if "lambda" not in hparam: raise ValueError("missing 'lambda' property of the 'hparam' dictionary")
+
+        super().adjast(hparam["lambda"])
 
     def generate(self):
         return list(map(lambda v: {"lambda": v}, super().generate()))
 
 class ModelAdapter():
     """A base class for a model adapter that provides methods for error analysis and hyperparameters tuning. Derived classes must implement methods creating the model and estimating parameters of the learning algorithm."""
+
+    @staticmethod
+    def verify_options(options):
+        for value in ["epochs", "batch_size", "verbose", "seed"]:
+            if value not in options: raise ValueError("missing '{}' property of the 'options' dictionary".format(value))
 
     def __init__(self, options={}, hparams={}, metrics=[]):
         self.options = {
@@ -53,11 +60,11 @@ class ModelAdapter():
             "seed": None,
             **options,
         }
-        self.hparams = {
-            "lambda": 0.,
-            **hparams,
-        }
-        self.model = self.build_model(hparams=self.hparams, metrics=metrics)
+
+        # There can't be any presets or default values for hyperparameters since we can't predict
+        # all possible combinations of them or future algorithms they will be used in.
+        self.hparams = hparams
+        self.model = self.build_model(self.hparams, metrics=metrics)
 
     def fit(self, ds):
         """Estimate parameters of the model using a method provided by a derived class."""
@@ -68,7 +75,7 @@ class ModelAdapter():
         """Estimate the loss and metrics values for the model."""
 
         X, y = ds
-        return self.model.evaluate(X, y, self.options["verbose"])
+        return self.model.evaluate(X, y, verbose=self.options["verbose"])
 
     def analyze_dataset(self, ds_train, ds_dev, steps=10):
         """Use model selection algorithm to determine if the dataset has an underfitting problem."""
@@ -135,7 +142,7 @@ class ModelAdapter():
 def _evaluate_cost(build_model, hparams, Theta, ds):
     """Apply forward propagation with the specified parameters to a newly created model and estimate the cost of the learning algorithm."""
 
-    model = build_model(hparams=hparams, metrics=[])
+    model = build_model(hparams, metrics=[])
     X, y = ds
 
     model.call(X)
@@ -219,6 +226,7 @@ def _read_hyperparameters(idx, hist):
 def _reset_regularization_hyperparameter(hparams):
     """Reset regularization hyperparameter lambda."""
 
-    hparams_without_regularization = hparams.copy()
-    hparams_without_regularization["lambda"] = 0.
-    return hparams_without_regularization
+    modified_hparams = hparams.copy()
+    if "lambda" in modified_hparams:
+        del modified_hparams["lambda"]
+    return modified_hparams
