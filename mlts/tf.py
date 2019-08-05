@@ -1,6 +1,14 @@
 import pandas as pd
 import numpy as np
 
+def _default_hyperparameters():
+    """Default values for hyperparameters."""
+
+    return {
+        "lambda": 0.,
+        "batch_size": 32,
+    }
+
 class RangeGenerator():
     """Generate and narrow a range within specified boundaries."""
 
@@ -33,8 +41,8 @@ class RangeGenerator():
 class LambdaRangeGenerator(RangeGenerator):
     """Generate and narrow a range of lambda regularization hyperparameter values."""
 
-    def __init__(self, start=0.0001, stop=10, steps=3, **args):
-        super().__init__(start=start, stop=stop, steps=steps, **args)
+    def __init__(self, start=0.0001, stop=10, steps=3, *args, **kwargs):
+        super(LambdaRangeGenerator, self).__init__(start=start, stop=stop, steps=steps, *args, **kwargs)
         
     def adjast(self, value):
         super().adjast(value["lambda"])
@@ -45,16 +53,17 @@ class LambdaRangeGenerator(RangeGenerator):
 class ModelAdapter():
     """A base class for a model adapter that provides methods for error analysis and hyperparameters tuning. Derived classes must implement methods creating the model and estimating parameters of the learning algorithm."""
 
-    def __init__(self, hparams, metrics=[]):
+    def __init__(self, hparams=_default_hyperparameters(), metrics=[], seed=None):
         model = self.build_model(hparams=hparams, metrics=metrics)
 
         self.model = model
         self.hparams = hparams
+        self.seed = seed
 
     def fit(self, ds, epochs):
         """Estimate parameters of the model using a method provided by a derived class."""
 
-        self.model = self.estimate_parameters(self.hparams, self.model, ds, epochs)
+        self.model = self.estimate_parameters(self.hparams, self.model, ds, epochs, seed=self.seed)
 
     def evaluate(self, ds):
         """Estimate the loss and metrics values for the model."""
@@ -71,7 +80,8 @@ class ModelAdapter():
                 hparams,
                 self.build_model(hparams, metrics=[]),
                 ds,
-                epochs=epochs,
+                epochs,
+                seed=self.seed,
             ).get_weights(),
             self.hparams,
             ds_train,
@@ -95,7 +105,8 @@ class ModelAdapter():
                 hparams,
                 self.build_model(hparams, metrics=[]),
                 ds,
-                epochs=epochs,
+                epochs,
+                seed=self.seed,
             ).get_weights(),
             self.hparams,
             gen,
