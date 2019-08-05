@@ -69,7 +69,7 @@ class ModelAdapter():
         """Estimate the loss and metrics values for the model."""
 
         X, y = ds
-        return self.model.evaluate(X, y)
+        return self.model.evaluate(X, y, verbose=0)
 
     def analyze_dataset(self, ds_train, ds_dev, epochs, steps=10):
         """Use model selection algorithm to determine if the dataset has an underfitting problem."""
@@ -145,7 +145,7 @@ def _evaluate_cost(build_model, hparams, Theta, ds):
 
     model.call(X)
     model.set_weights(Theta)
-    j = model.evaluate(X, y)
+    j = model.evaluate(X, y, verbose=0)
 
     return j
 
