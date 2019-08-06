@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+import json
 
 class RangeGenerator():
     """Generate and narrow a range within specified boundaries."""
@@ -118,6 +119,18 @@ class ModelAdapter():
             ds_dev,
             deep,
         )
+
+    def load_hyperparameters(self, path):
+        """Load hyperparameters from the JSON file."""
+
+        with open(path, 'r') as file:
+            self.hparams = json.load(file)
+
+    def save_hyperparameters(self, path):
+        """Save hyperparameters to the JSON file."""
+
+        with open(path, 'w') as file:
+            json.dump(self.hparams, file)
 
     def metric(self, name):
         "Retrieve the last value of metric with specified name from the model history."
