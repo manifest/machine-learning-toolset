@@ -6,7 +6,7 @@ README = (pathlib.Path(__file__).parent / "README.md").read_text()
 
 setup(
     name='mlts',
-    version='0.2.0',
+    version='0.3.0',
     description='Machine Learning Toolset',
     long_description=README,
     long_description_content_type="text/markdown",
