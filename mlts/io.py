@@ -50,26 +50,53 @@ def split(data, ycol, shape, seed = None):
     )
 
 def slice(ds, idx_start, idx_stop):
-    """Retrieve a slice of the dataset"""
-
-    return (ds[0][idx_start:idx_stop, :], ds[1][idx_start:idx_stop, :])
-
-def normalize(ds):
-    """Estimate normalization parametes on the training dataset and apply them to development and testing datasets."""
+    """Retrieve a slice of the dataset."""
     if type(ds) != tuple: raise TypeError("'ds' isn't a tuple")
-    if len(ds) != 3: raise ValueError("'ds' isn't a 3-element tuple")
+    if len(ds) != 2: raise ValueError("'ds' isn't a 2-element tuple")
+    if idx_stop < idx_start: raise RuntimeError("'idx_start' value of the range has a greater value then 'idx_stop'")
 
-    (X_train_in, y_train), (X_dev_in, y_dev), (X_test_in, y_test) = ds
+    return (
+        ds[0][idx_start:idx_stop, :],
+        ds[1][idx_start:idx_stop, :],
+    )
+
+def reshape(ds, shape):
+    """Reshape input in the dataset."""
+    if type(shape) != tuple: raise TypeError("'shape' isn't a tuple")
+    if type(ds) != tuple: raise TypeError("'ds' isn't a tuple")
+    if len(ds) != 2: raise ValueError("'ds' isn't a 2-element tuple")
+
+    return (
+        ds[0].reshape((-1, *shape)),
+        ds[1],
+    )
+
+def normalize(dss, target_shape=None):
+    """Estimate normalization parametes on the training dataset and apply them to development and testing datasets."""
+    if type(dss) != tuple: raise TypeError("'dss' isn't a tuple")
+    if len(dss) != 3: raise ValueError("'dss' isn't a 3-element tuple")
+
+    (X_train_in, y_train), (X_dev_in, y_dev), (X_test_in, y_test) = dss
 
     mu, sigma = _norm.estimate(X_train_in)
     X_train = _norm.apply(X_train_in, mu, sigma)
     X_dev = _norm.apply(X_dev_in, mu, sigma)
     X_test = _norm.apply(X_test_in, mu, sigma)
 
-    return (
+    dss_norm = (
         (X_train, y_train),
         (X_dev, y_dev),
         (X_test, y_test),
+    )
+    if (target_shape != None):
+        dss_norm = (
+            reshape(dss_norm[0], target_shape),
+            reshape(dss_norm[1], target_shape),
+            reshape(dss_norm[2], target_shape),
+        )
+
+    return (
+        *dss_norm,
         mu,
         sigma
     )

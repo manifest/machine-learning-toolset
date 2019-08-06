@@ -1,3 +1,4 @@
+from . import io as _io
 import pandas as pd
 import numpy as np
 import json
@@ -160,6 +161,8 @@ def _evaluate_cost(build_model, options, hparams, Theta, ds):
     model = build_model(options, hparams, metrics=[])
     X, y = ds
 
+    ## Note that 'X' may be of type 'np.float32' or 'np.float64',
+    ## that may cause a graph compilation error, since support of 'float64' in TensorFlow is limited.
     model.call(X)
     model.set_weights(Theta)
     j = model.evaluate(X, y, verbose=0)
@@ -169,14 +172,14 @@ def _evaluate_cost(build_model, options, hparams, Theta, ds):
 def _analyze_dataset(build_model, optimize, options, hparams, ds_train, ds_dev, steps, hist=pd.DataFrame()):
     """Use model selection algorithm to determine if the dataset has an underfitting problem."""
 
-    X_train, y_train = ds_train
-    m, n_x = X_train.shape
+    X_train, _ = ds_train
+    m = X_train.shape[0]
 
     m_acc = np.linspace(start=1, stop=m, num=steps, dtype=int)
     hparams_without_regularization = _reset_regularization_hyperparameter(hparams)
 
     for m_train_slice in m_acc:
-        ds_train_slice = (X_train[0:m_train_slice, :], y_train[0:m_train_slice])
+        ds_train_slice = _io.slice(ds_train, 0, m_train_slice)
 
         ## We use regularization when estimating parameters
         Theta = optimize(hparams, ds_train_slice)
@@ -210,8 +213,8 @@ def _analyze_hyperparameters_deep(build_model, optimize, options, hparams, gen, 
 def _analyze_hyperparameters(build_model, optimize, options, hparams, modifiers, ds_train, ds_dev, hist=pd.DataFrame()):
     """Use model selection algorithm to find the best hyperparameters values on the specified range of values."""
 
-    X_train, y_train = ds_train
-    m, n_x = X_train.shape
+    X_train, _ = ds_train
+    m = X_train.shape[0]
 
     for modifier in modifiers:
         modified_hparams = {**hparams, **modifier}
