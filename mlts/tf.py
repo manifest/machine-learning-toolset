@@ -64,7 +64,7 @@ class ModelAdapter():
         # There can't be any presets or default values for hyperparameters since we can't predict
         # all possible combinations of them or future algorithms they will be used in.
         self.hparams = hparams
-        self.model = self.build_model(self.hparams, metrics=metrics)
+        self.model = self.build_model(self.options, self.hparams, metrics=metrics)
 
     def fit(self, ds):
         """Estimate parameters of the model using a method provided by a derived class."""
@@ -84,9 +84,10 @@ class ModelAdapter():
             self.build_model,
             lambda hparams, ds: self.estimate_parameters(
                 self.options,
-                self.build_model(hparams, metrics=[]),
+                self.build_model(self.options, hparams, metrics=[]),
                 ds,
             ).get_weights(),
+            self.options,
             self.hparams,
             ds_train,
             ds_dev,
@@ -107,9 +108,10 @@ class ModelAdapter():
             self.build_model,
             lambda hparams, ds: self.estimate_parameters(
                 self.options,
-                self.build_model(hparams, metrics=[]),
+                self.build_model(self.options, hparams, metrics=[]),
                 ds,
             ).get_weights(),
+            self.options,
             self.hparams,
             gen,
             ds_train,
@@ -128,7 +130,7 @@ class ModelAdapter():
         return pd.DataFrame(self.model.history.history).rename_axis("epoch").reset_index()
 
     @staticmethod
-    def build_model(hparams, metrics = []):
+    def build_model(options, hparams, metrics = []):
         """Implement the model."""
 
         raise NotImplementedError()
@@ -139,10 +141,10 @@ class ModelAdapter():
 
         raise NotImplementedError()
 
-def _evaluate_cost(build_model, hparams, Theta, ds):
+def _evaluate_cost(build_model, options, hparams, Theta, ds):
     """Apply forward propagation with the specified parameters to a newly created model and estimate the cost of the learning algorithm."""
 
-    model = build_model(hparams, metrics=[])
+    model = build_model(options, hparams, metrics=[])
     X, y = ds
 
     model.call(X)
@@ -151,7 +153,7 @@ def _evaluate_cost(build_model, hparams, Theta, ds):
 
     return j
 
-def _analyze_dataset(build_model, optimize, hparams, ds_train, ds_dev, steps, hist=pd.DataFrame()):
+def _analyze_dataset(build_model, optimize, options, hparams, ds_train, ds_dev, steps, hist=pd.DataFrame()):
     """Use model selection algorithm to determine if the dataset has an underfitting problem."""
 
     X_train, y_train = ds_train
@@ -167,9 +169,9 @@ def _analyze_dataset(build_model, optimize, hparams, ds_train, ds_dev, steps, hi
         Theta = optimize(hparams, ds_train_slice)
         ## We don't use regularization when computing the training and development error
         ## The training set error is computed on the training subset
-        E_train = _evaluate_cost(build_model, hparams_without_regularization, Theta, ds_train_slice)
+        E_train = _evaluate_cost(build_model, options, hparams_without_regularization, Theta, ds_train_slice)
         ## However, the cross validation error is computed over the entire development set
-        E_dev = _evaluate_cost(build_model, hparams_without_regularization, Theta, ds_dev)
+        E_dev = _evaluate_cost(build_model, options, hparams_without_regularization, Theta, ds_dev)
 
         hist = hist.append(
             pd.DataFrame({"E_train": E_train, "E_dev": E_dev, "m": m_train_slice}, index = [0]),
@@ -178,11 +180,11 @@ def _analyze_dataset(build_model, optimize, hparams, ds_train, ds_dev, steps, hi
 
     return hist
 
-def _analyze_hyperparameters_deep(build_model, optimize, hparams, gen, ds_train, ds_dev, deep, hist=pd.DataFrame()):
+def _analyze_hyperparameters_deep(build_model, optimize, options, hparams, gen, ds_train, ds_dev, deep, hist=pd.DataFrame()):
     """Use model selection algorithm to find the best hyperparameters values utilizing a range generator."""
 
     modifiers = gen.generate()
-    result = _analyze_hyperparameters(build_model, optimize, hparams, modifiers, ds_train, ds_dev, hist)
+    result = _analyze_hyperparameters(build_model, optimize, options, hparams, modifiers, ds_train, ds_dev, hist)
 
     deep -= 1
     if deep < 1:
@@ -190,9 +192,9 @@ def _analyze_hyperparameters_deep(build_model, optimize, hparams, gen, ds_train,
 
     idx, hist = result
     gen.adjast(_read_hyperparameters(idx, hist))
-    return _analyze_hyperparameters_deep(build_model, optimize, hparams, gen, ds_train, ds_dev, deep, hist)
+    return _analyze_hyperparameters_deep(build_model, optimize, options, hparams, gen, ds_train, ds_dev, deep, hist)
 
-def _analyze_hyperparameters(build_model, optimize, hparams, modifiers, ds_train, ds_dev, hist=pd.DataFrame()):
+def _analyze_hyperparameters(build_model, optimize, options, hparams, modifiers, ds_train, ds_dev, hist=pd.DataFrame()):
     """Use model selection algorithm to find the best hyperparameters values on the specified range of values."""
 
     X_train, y_train = ds_train
@@ -206,9 +208,9 @@ def _analyze_hyperparameters(build_model, optimize, hparams, modifiers, ds_train
         Theta = optimize(modified_hparams, ds_train)
         ## We don't use regularization when computing the training and development error
         ## The training set error is computed on the training subset
-        E_train = _evaluate_cost(build_model, modified_hparams_without_regularization, Theta, ds_train)
+        E_train = _evaluate_cost(build_model, options, modified_hparams_without_regularization, Theta, ds_train)
         ## However, the cross validation error is computed over the entire development set
-        E_dev = _evaluate_cost(build_model, modified_hparams_without_regularization, Theta, ds_dev)
+        E_dev = _evaluate_cost(build_model, options, modified_hparams_without_regularization, Theta, ds_dev)
 
         hist = hist.append(
             pd.DataFrame({"E_train": E_train, "E_dev": E_dev, **modifier}, index = [0]),
