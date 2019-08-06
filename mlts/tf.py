@@ -161,10 +161,11 @@ def _evaluate_cost(build_model, options, hparams, Theta, ds):
     model = build_model(options, hparams, metrics=[])
     X, y = ds
 
+    model.build(X.shape)
+    model.set_weights(Theta)
+
     ## Note that 'X' may be of type 'np.float32' or 'np.float64',
     ## that may cause a graph compilation error, since support of 'float64' in TensorFlow is limited.
-    model.call(X)
-    model.set_weights(Theta)
     j = model.evaluate(X, y, verbose=0)
 
     return j
