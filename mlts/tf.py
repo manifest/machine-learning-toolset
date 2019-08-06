@@ -143,6 +143,20 @@ class ModelAdapter():
 
         return pd.DataFrame(self.model.history.history).rename_axis("epoch").reset_index()
 
+    def generalized_metrics(self, ds_dev, ds_test):
+        "Evaluate the model on development and testing sets and return the metrics along with metrics of the training set."
+
+        metrics_dev = self.evaluate(ds_dev)
+        metrics_test = self.evaluate(ds_test)
+        keys = list(self.model.history.history.keys())
+        return pd.DataFrame(
+            list(map(
+                lambda i: dict(train=self.metric(keys[i]), dev=metrics_dev[i], test=metrics_test[i]),
+                range(len(keys))
+            )),
+            index=keys,
+        )
+
     @staticmethod
     def build_model(options, hparams, metrics = []):
         """Implement the model."""
