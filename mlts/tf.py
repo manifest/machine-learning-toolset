@@ -50,28 +50,31 @@ class ModelAdapter():
     """A base class for a model adapter that provides methods for error analysis and hyperparameters tuning. Derived classes must implement methods creating the model and estimating parameters of the learning algorithm."""
 
     @staticmethod
-    def verify_options(options):
-        for value in ["epochs", "batch_size", "verbose", "seed"]:
-            if value not in options: raise ValueError("missing '{}' property of the 'options' dictionary".format(value))
-
-    def __init__(self, options={}, hparams={}, metrics=[]):
-        self.options = {
+    def default_options(options = {}):
+        return {
             "epochs": 1,
-            "batch_size": 32,
             "verbose": 0,
             "seed": None,
             **options,
         }
 
+    @classmethod
+    def verify_options(Self, options):
+        for key in Self.default_options().keys():
+            if key not in options: raise ValueError("missing '{}' property of the 'options' dictionary".format(key))
+
+    def __init__(self, options={}, hparams={}):
+        self.options = self.default_options(options)
+
         # There can't be any presets or default values for hyperparameters since we can't predict
         # all possible combinations of them or future algorithms they will be used in.
         self.hparams = hparams
-        self.model = self.build_model(self.options, self.hparams, metrics=metrics)
+        self.model = self.build_model(self.options, self.hparams)
 
-    def fit(self, ds):
+    def fit(self, ds, metrics = []):
         """Estimate parameters of the model using a method provided by a derived class."""
 
-        self.model = self.estimate_parameters(self.options, self.model, ds)
+        self.model = self.optimization(self.options, self.hparams, self.model, ds, metrics)
 
     def evaluate(self, ds):
         """Estimate the loss and metrics values for the model."""
@@ -79,46 +82,54 @@ class ModelAdapter():
         X, y = ds
         return self.model.evaluate(X, y, verbose=self.options["verbose"])
 
-    def analyze_dataset(self, ds_train, ds_dev, steps=10):
-        """Use model selection algorithm to determine if the dataset has an underfitting problem."""
-
-        return _analyze_dataset(
-            self.build_model,
-            lambda hparams, ds: self.estimate_parameters(
-                self.options,
-                self.build_model(self.options, hparams, metrics=[]),
-                ds,
-            ).get_weights(),
-            self.options,
-            self.hparams,
-            ds_train,
-            ds_dev,
-            steps,
-        )
-
     def tune_hyperparameters(self, gen, ds_train, ds_dev, deep=10):
         """Use model selection algorithm to find the best hyperparameters values. Update hyperparameters values of the adapter."""
 
-        result = self.analyze_hyperparameters(gen, ds_train, ds_dev, deep)
+        result = self.analyze_hyperparameters(self.options, self.hparams, gen, ds_train, ds_dev, deep)
         self.hparams = {**self.hparams, **_read_hyperparameters(*result)}
         return result
 
-    def analyze_hyperparameters(self, gen, ds_train, ds_dev, deep=10):
+    @classmethod
+    def analyze_hyperparameters(Self, options, hparams, gen, ds_train, ds_dev, deep=10):
         """Use model selection algorithm to find the best hyperparameters values."""
 
         return _analyze_hyperparameters_deep(
-            self.build_model,
-            lambda hparams, ds: self.estimate_parameters(
-                self.options,
-                self.build_model(self.options, hparams, metrics=[]),
-                ds,
+            Self.build_model,
+            Self.loss(options),
+            lambda _hparams, _ds: Self.optimization(
+                options,
+                _hparams,
+                Self.build_model(options, _hparams),
+                _ds,
+                metrics=[],
             ).get_weights(),
-            self.options,
-            self.hparams,
+            options,
+            hparams,
             gen,
             ds_train,
             ds_dev,
             deep,
+        )
+
+    @classmethod
+    def analyze_dataset(Self, options, hparams, ds_train, ds_dev, steps=10):
+        """Use model selection algorithm to determine if the dataset has an underfitting problem."""
+
+        return _analyze_dataset(
+            Self.build_model,
+            Self.loss(options),
+            lambda _hparams, _ds: Self.optimization(
+                options,
+                _hparams,
+                Self.build_model(options, _hparams),
+                _ds,
+                metrics=[],
+            ).get_weights(),
+            options,
+            hparams,
+            ds_train,
+            ds_dev,
+            steps,
         )
 
     def load_hyperparameters(self, path):
@@ -158,23 +169,32 @@ class ModelAdapter():
         )
 
     @staticmethod
-    def build_model(options, hparams, metrics = []):
-        """Implement the model."""
+    def build_model(options, hparams):
+        """Build and return the model."""
 
         raise NotImplementedError()
 
     @staticmethod
-    def estimate_parameters(options, model, ds, callbacks=[]):
-        """Implement the learning algorithm parameters estimation."""
+    def loss(options):
+        """Return the loss function."""
 
         raise NotImplementedError()
 
-def _evaluate_cost(build_model, options, hparams, Theta, ds):
+    @staticmethod
+    def optimization(options, hparams, model, ds, metrics = [], callbacks=[]):
+        """Estimate parameters of the learning algorithm and return the updated model."""
+
+        raise NotImplementedError()
+
+def _evaluate_cost(build_model, loss, options, hparams, Theta, ds):
     """Apply forward propagation with the specified parameters to a newly created model and estimate the cost of the learning algorithm."""
 
-    model = build_model(options, hparams, metrics=[])
-    X, y = ds
+    model = build_model(options, hparams)
+    ## We don't need any optimizer to just evaluate the loss.
+    ## We specify the stochastic gradient descent just because the optimizer argument is required by the compile function.
+    model.compile(optimizer='sgd', loss=loss)
 
+    X, y = ds
     model.build(X.shape)
     model.set_weights(Theta)
 
@@ -184,7 +204,7 @@ def _evaluate_cost(build_model, options, hparams, Theta, ds):
 
     return j
 
-def _analyze_dataset(build_model, optimize, options, hparams, ds_train, ds_dev, steps, hist=pd.DataFrame()):
+def _analyze_dataset(build_model, loss, optimize, options, hparams, ds_train, ds_dev, steps, hist=pd.DataFrame()):
     """Use model selection algorithm to determine if the dataset has an underfitting problem."""
 
     X_train, _ = ds_train
@@ -200,9 +220,9 @@ def _analyze_dataset(build_model, optimize, options, hparams, ds_train, ds_dev, 
         Theta = optimize(hparams, ds_train_slice)
         ## We don't use regularization when computing the training and development error
         ## The training set error is computed on the training subset
-        E_train = _evaluate_cost(build_model, options, hparams_without_regularization, Theta, ds_train_slice)
+        E_train = _evaluate_cost(build_model, loss, options, hparams_without_regularization, Theta, ds_train_slice)
         ## However, the cross validation error is computed over the entire development set
-        E_dev = _evaluate_cost(build_model, options, hparams_without_regularization, Theta, ds_dev)
+        E_dev = _evaluate_cost(build_model, loss, options, hparams_without_regularization, Theta, ds_dev)
 
         hist = hist.append(
             pd.DataFrame({"E_train": E_train, "E_dev": E_dev, "m": m_train_slice}, index = [0]),
@@ -211,11 +231,11 @@ def _analyze_dataset(build_model, optimize, options, hparams, ds_train, ds_dev, 
 
     return hist
 
-def _analyze_hyperparameters_deep(build_model, optimize, options, hparams, gen, ds_train, ds_dev, deep, hist=pd.DataFrame()):
+def _analyze_hyperparameters_deep(build_model, loss, optimize, options, hparams, gen, ds_train, ds_dev, deep, hist=pd.DataFrame()):
     """Use model selection algorithm to find the best hyperparameters values utilizing a range generator."""
 
     modifiers = gen.generate()
-    result = _analyze_hyperparameters(build_model, optimize, options, hparams, modifiers, ds_train, ds_dev, hist)
+    result = _analyze_hyperparameters(build_model, loss, optimize, options, hparams, modifiers, ds_train, ds_dev, hist)
 
     deep -= 1
     if deep < 1:
@@ -223,9 +243,9 @@ def _analyze_hyperparameters_deep(build_model, optimize, options, hparams, gen, 
 
     idx, hist = result
     gen.adjast(_read_hyperparameters(idx, hist))
-    return _analyze_hyperparameters_deep(build_model, optimize, options, hparams, gen, ds_train, ds_dev, deep, hist)
+    return _analyze_hyperparameters_deep(build_model, loss, optimize, options, hparams, gen, ds_train, ds_dev, deep, hist)
 
-def _analyze_hyperparameters(build_model, optimize, options, hparams, modifiers, ds_train, ds_dev, hist=pd.DataFrame()):
+def _analyze_hyperparameters(build_model, loss, optimize, options, hparams, modifiers, ds_train, ds_dev, hist=pd.DataFrame()):
     """Use model selection algorithm to find the best hyperparameters values on the specified range of values."""
 
     X_train, _ = ds_train
@@ -239,9 +259,9 @@ def _analyze_hyperparameters(build_model, optimize, options, hparams, modifiers,
         Theta = optimize(modified_hparams, ds_train)
         ## We don't use regularization when computing the training and development error
         ## The training set error is computed on the training subset
-        E_train = _evaluate_cost(build_model, options, modified_hparams_without_regularization, Theta, ds_train)
+        E_train = _evaluate_cost(build_model, loss, options, modified_hparams_without_regularization, Theta, ds_train)
         ## However, the cross validation error is computed over the entire development set
-        E_dev = _evaluate_cost(build_model, options, modified_hparams_without_regularization, Theta, ds_dev)
+        E_dev = _evaluate_cost(build_model, loss, options, modified_hparams_without_regularization, Theta, ds_dev)
 
         hist = hist.append(
             pd.DataFrame({"E_train": E_train, "E_dev": E_dev, **modifier}, index = [0]),
