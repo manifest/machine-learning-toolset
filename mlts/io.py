@@ -61,6 +61,16 @@ def slice(ds, idx_start, idx_stop):
         ds[1][idx_start:idx_stop, :],
     )
 
+def round_steps(stop, steps):
+    """Return number of round steps from '0' to 'stop'."""
+
+    return int(round(stop // steps * steps))
+
+def round_step(stop, steps):
+    """Return a size of a round step from '0' to 'stop'."""
+
+    return int(round(round_steps(stop, steps) / steps))
+
 def reshape(ds, target_shape):
     """Reshape input in the dataset."""
     if type(target_shape) != tuple: raise TypeError("'target_shape' isn't a tuple")
