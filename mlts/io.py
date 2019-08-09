@@ -1,6 +1,7 @@
 from . import normalization as _norm
 import pandas as pd
 import numpy as np
+import tensorflow as tf
 from functools import reduce
 import math
 
@@ -100,3 +101,6 @@ def normalize(dss, target_shape=None):
         mu,
         sigma
     )
+
+def to_tfdata(dss, batch_size):
+    return tuple(map(lambda ds: tf.data.Dataset.from_tensor_slices(ds).batch(batch_size), dss))

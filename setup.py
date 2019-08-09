@@ -22,8 +22,9 @@ setup(
     ],
     python_requires='>=3.6',
     install_requires=[
-        'pandas',
-        'numpy',
+        'pandas >= 0.25',
+        'numpy >= 1.17',
+        'tensorflow >= 2.0.0b1',
     ],
     packages=find_packages()
 )
