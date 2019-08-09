@@ -60,14 +60,22 @@ def slice(ds, idx_start, idx_stop):
         ds[1][idx_start:idx_stop, :],
     )
 
-def reshape(ds, shape):
+def reshape(ds, target_shape):
     """Reshape input in the dataset."""
-    if type(shape) != tuple: raise TypeError("'shape' isn't a tuple")
+    if type(target_shape) != tuple: raise TypeError("'target_shape' isn't a tuple")
     if type(ds) != tuple: raise TypeError("'ds' isn't a tuple")
-    if len(ds) != 2: raise ValueError("'ds' isn't a 2-element tuple")
+
+    dim = len(ds)
+    if dim == 3:
+        return (
+            reshape(ds[0], target_shape),
+            reshape(ds[1], target_shape),
+            reshape(ds[2], target_shape),
+        )
+    if dim != 2: raise ValueError("'ds' isn't a 2-element tuple")
 
     return (
-        ds[0].reshape((-1, *shape)),
+        ds[0].reshape((-1, *target_shape)),
         ds[1],
     )
 
@@ -83,20 +91,12 @@ def normalize(dss, target_shape=None):
     X_dev = _norm.apply(X_dev_in, mu, sigma)
     X_test = _norm.apply(X_test_in, mu, sigma)
 
-    dss_norm = (
-        (X_train, y_train),
-        (X_dev, y_dev),
-        (X_test, y_test),
-    )
-    if (target_shape != None):
-        dss_norm = (
-            reshape(dss_norm[0], target_shape),
-            reshape(dss_norm[1], target_shape),
-            reshape(dss_norm[2], target_shape),
-        )
-
     return (
-        *dss_norm,
+        (
+            (X_train, y_train),
+            (X_dev, y_dev),
+            (X_test, y_test),
+        ),
         mu,
         sigma
     )
