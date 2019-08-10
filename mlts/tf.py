@@ -1,6 +1,7 @@
 from . import io as _io
 import pandas as pd
 import numpy as np
+import tensorflow as tf
 import json
 
 class RangeGenerator():
@@ -79,8 +80,7 @@ class ModelAdapter():
     def evaluate(self, ds):
         """Estimate the loss and metrics values for the model."""
 
-        X, y = ds
-        return self.model.evaluate(X, y, verbose=self.options["verbose"])
+        return self.model.evaluate(ds, verbose=self.options["verbose"])
 
     def tune_hyperparameters(self, gen, ds_train, ds_dev, deep=10):
         """Use model selection algorithm to find the best hyperparameters values. Update hyperparameters values of the adapter."""
@@ -112,8 +112,16 @@ class ModelAdapter():
         )
 
     @classmethod
-    def analyze_dataset(Self, options, hparams, ds_train, ds_dev, steps=10):
+    def analyze_dataset(Self, options, hparams, ds_train, ds_dev, step_size = None, n_steps = 10):
         """Use model selection algorithm to determine if the dataset has an underfitting problem."""
+        if n_steps < 1: raise ValueError("'n_steps' is less then 1")
+
+        ## Note that we use experimental functional here
+        ## to estimate a 'step_size' that cover the entire dataset the best in 'n_steps'
+        ## [the use is optional, but affects the function interface]
+        if step_size == None:
+            step_size = _io.round_step(tf.data.experimental.cardinality(ds_train).numpy(), n_steps)
+        if step_size < 1: raise ValueError("'step_size' is less then 1")
 
         return _analyze_dataset(
             Self.build_model,
@@ -129,7 +137,8 @@ class ModelAdapter():
             hparams,
             ds_train,
             ds_dev,
-            steps,
+            step_size,
+            n_steps,
         )
 
     def load_hyperparameters(self, path):
@@ -193,28 +202,25 @@ def _evaluate_cost(build_model, loss, options, hparams, Theta, ds):
     ## We don't need any optimizer to just evaluate the loss.
     ## We specify the stochastic gradient descent just because the optimizer argument is required by the compile function.
     model.compile(optimizer='sgd', loss=loss)
-
-    X, y = ds
-    model.build(X.shape)
     model.set_weights(Theta)
 
-    ## Note that 'X' may be of type 'np.float32' or 'np.float64',
-    ## that may cause a graph compilation error, since support of 'float64' in TensorFlow is limited.
-    j = model.evaluate(X, y, verbose=0)
+    j = model.evaluate(ds, verbose=0)
 
     return j
 
-def _analyze_dataset(build_model, loss, optimize, options, hparams, ds_train, ds_dev, steps, hist=pd.DataFrame()):
+def _analyze_dataset(build_model, loss, optimize, options, hparams, ds_train, ds_dev, step_size, n_steps, hist=pd.DataFrame()):
     """Use model selection algorithm to determine if the dataset has an underfitting problem."""
 
-    X_train, _ = ds_train
-    m = X_train.shape[0]
-
-    m_acc = np.linspace(start=1, stop=m, num=steps, dtype=int)
     hparams_without_regularization = _reset_regularization_hyperparameter(hparams)
 
-    for m_train_slice in m_acc:
-        ds_train_slice = _io.slice(ds_train, 0, m_train_slice)
+    for step in range(n_steps):
+        m_train_slice = step_size * step + 1
+        ds_train_slice = ds_train.take(m_train_slice)
+        ## Note that we use experimental functional here
+        ## to break from the loop if 'ds_train' has been exhausted
+        ## [the use is optional]
+        if tf.data.experimental.cardinality(ds_train_slice).numpy() < m_train_slice:
+            break
 
         ## We use regularization when estimating parameters
         Theta = optimize(hparams, ds_train_slice)
@@ -224,10 +230,7 @@ def _analyze_dataset(build_model, loss, optimize, options, hparams, ds_train, ds
         ## However, the cross validation error is computed over the entire development set
         E_dev = _evaluate_cost(build_model, loss, options, hparams_without_regularization, Theta, ds_dev)
 
-        hist = hist.append(
-            pd.DataFrame({"E_train": E_train, "E_dev": E_dev, "m": m_train_slice}, index = [0]),
-            ignore_index=True
-        )
+        hist = hist.append(pd.DataFrame({"E_train": E_train, "E_dev": E_dev, "m_batch": m_train_slice}, index = [step]))
 
     return hist
 
@@ -247,9 +250,6 @@ def _analyze_hyperparameters_deep(build_model, loss, optimize, options, hparams,
 
 def _analyze_hyperparameters(build_model, loss, optimize, options, hparams, modifiers, ds_train, ds_dev, hist=pd.DataFrame()):
     """Use model selection algorithm to find the best hyperparameters values on the specified range of values."""
-
-    X_train, _ = ds_train
-    m = X_train.shape[0]
 
     for modifier in modifiers:
         modified_hparams = {**hparams, **modifier}
