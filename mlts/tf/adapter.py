@@ -1,60 +1,17 @@
-from . import io as _io
+from .. import io as _io
 import pandas as pd
 import numpy as np
 import tensorflow as tf
 import json
 
-class RangeGenerator():
-    """Generate and narrow a range within specified boundaries."""
-
-    def __init__(self, start, stop, steps, dtype=float):
-        self.start = start
-        self.stop = stop
-        self.n_steps = steps
-        self.dtype = dtype
-
-        self._update_step()
-
-    def generate(self):
-        """Generate the range values."""
-
-        return np.linspace(start=self.start, stop=self.stop, num=self.n_steps, dtype=self.dtype)
-    
-    def adjast(self, value):
-        """Adjust the range to new narrow boundaries around the value."""
-
-        self.start = max(value - self.step, self.start)
-        self.stop = min(value + self.step, self.stop)
-
-        self._update_step()
-        
-    def _update_step(self):
-        if self.stop < self.start: raise RuntimeError("'start' value of the range has a greater value then 'stop'")
-
-        self.step = (self.stop - self.start) / self.n_steps
-
-class LambdaRangeGenerator(RangeGenerator):
-    """Generate and narrow a range of lambda regularization hyperparameter values."""
-
-    def __init__(self, start=0.0001, stop=10, steps=3, *args, **kwargs):
-        super(LambdaRangeGenerator, self).__init__(start=start, stop=stop, steps=steps, *args, **kwargs)
-
-    def adjast(self, hparam):
-        if "lambda" not in hparam: raise ValueError("missing 'lambda' property of the 'hparam' dictionary")
-
-        super().adjast(hparam["lambda"])
-
-    def generate(self):
-        return list(map(lambda v: {"lambda": v}, super().generate()))
-
-class AdapterOptions():
+class Options():
     def __init__(self, epochs=None, verbose=None, seed=None):
         self.epochs = 1 if epochs == None else epochs
         self.verbose = 0 if verbose == None else verbose
         self.seed = seed
 
-class Adapter():
-    """A base class for a adapter that provides methods for error analysis and hyperparameters tuning. Derived classes must implement methods creating the model and estimating parameters of the learning algorithm."""
+class Model():
+    """A base class for a model adapter that provides methods for error analysis and hyperparameters tuning. Derived classes must implement methods creating the model and estimating parameters of the learning algorithm."""
 
     def __init__(self, options={}, hparams={}):
         self.options = options
